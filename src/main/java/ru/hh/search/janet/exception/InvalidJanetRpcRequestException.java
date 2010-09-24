@@ -5,3 +5,13 @@
  * all copies or substantial portions of the Software.
  */
 
+package ru.hh.search.janet.exception;
+
+@SuppressWarnings("serial")
+public class InvalidJanetRpcRequestException extends JanetRpcException {
+
+  public InvalidJanetRpcRequestException(Throwable t, String message) {
+    super(message, t);
+  }
+
+}

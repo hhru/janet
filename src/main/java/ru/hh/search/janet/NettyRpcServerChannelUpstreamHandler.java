@@ -1,25 +1,11 @@
 /*
  * Copyright (c) 2009 Stephen Tu <stephen_tu@berkeley.edu>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- * 
+ * Copyright (c) 2010 Pavel Trukhanov <p.trukhanov@hh.ru>
  * The above copyright notice and this permission notice shall be included in
  * all copies or substantial portions of the Software.
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
  */
-package com.googlecode.protobuf.netty;
+
+package ru.hh.search.janet;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -41,15 +27,15 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 import com.google.protobuf.ServiceException;
 import com.google.protobuf.Descriptors.MethodDescriptor;
-import com.googlecode.protobuf.netty.NettyRpcProto.ErrorCode;
-import com.googlecode.protobuf.netty.NettyRpcProto.RpcRequest;
-import com.googlecode.protobuf.netty.NettyRpcProto.RpcResponse;
-import com.googlecode.protobuf.netty.exception.InvalidRpcRequestException;
-import com.googlecode.protobuf.netty.exception.NoRequestIdException;
-import com.googlecode.protobuf.netty.exception.NoSuchServiceException;
-import com.googlecode.protobuf.netty.exception.NoSuchServiceMethodException;
-import com.googlecode.protobuf.netty.exception.RpcException;
-import com.googlecode.protobuf.netty.exception.RpcServiceException;
+import ru.hh.search.janet.NettyRpcProto.ErrorCode;
+import ru.hh.search.janet.NettyRpcProto.RpcRequest;
+import ru.hh.search.janet.NettyRpcProto.RpcResponse;
+import ru.hh.search.janet.exception.InvalidJanetRpcRequestException;
+import ru.hh.search.janet.exception.JanetRpcException;
+import ru.hh.search.janet.exception.NoRequestIdException;
+import ru.hh.search.janet.exception.NoSuchServiceException;
+import ru.hh.search.janet.exception.NoSuchServiceMethodException;
+import ru.hh.search.janet.exception.RpcServiceException;
 
 @ChannelPipelineCoverage("all")
 class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler {
@@ -87,21 +73,21 @@ class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler 
 						blockingService.getRequestPrototype(methodDescriptor),
 						request.getRequestMessage());
 				} catch (InvalidProtocolBufferException ex) {
-					throw new InvalidRpcRequestException(ex, request, "Could not build method request message");
+					throw new InvalidJanetRpcRequestException(ex, request, "Could not build method request message");
 				}
-				RpcController controller = new NettyRpcController();
+				RpcController controller = new JanetRpcController();
 				Message methodResponse = null;
 				try {
 					methodResponse = blockingService.callBlockingMethod(methodDescriptor, controller, methodRequest);
 				} catch (ServiceException ex) {
 					throw new RpcServiceException(ex, request, "BlockingService RPC call threw ServiceException");
 				} catch (Exception ex) {
-					throw new RpcException(ex, request, "BlockingService threw unexpected exception");
+					throw new JanetRpcException(ex, request, "BlockingService threw unexpected exception");
 				}
 				if (controller.failed()) {
-					throw new RpcException(request, "BlockingService RPC failed: " + controller.errorText());
+					throw new JanetRpcException(request, "BlockingService RPC failed: " + controller.errorText());
 				} else if (methodResponse == null) {
-					throw new RpcException(request, "BlockingService RPC returned null response");
+					throw new JanetRpcException(request, "BlockingService RPC returned null response");
 				} 
 				RpcResponse response = NettyRpcProto.RpcResponse.newBuilder()
 					.setId(request.getId())
@@ -123,10 +109,10 @@ class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler 
 						service.getRequestPrototype(methodDescriptor),
 						request.getRequestMessage());
 				} catch (InvalidProtocolBufferException ex) {
-					throw new InvalidRpcRequestException(ex, request, "Could not build method request message");
+					throw new InvalidJanetRpcRequestException(ex, request, "Could not build method request message");
 				}
 				final Channel channel = e.getChannel();
-				final RpcController controller = new NettyRpcController();
+				final RpcController controller = new JanetRpcController();
 				RpcCallback<Message> callback = !request.hasId() ? null : new RpcCallback<Message>() {
 					public void run(Message methodResponse) {
 						if (methodResponse != null) {
@@ -149,7 +135,7 @@ class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler 
 				try {
 					service.callMethod(methodDescriptor, controller, methodRequest, callback);
 				} catch (Exception ex) {
-					throw new RpcException(ex, request, "Service threw unexpected exception");
+					throw new JanetRpcException(ex, request, "Service threw unexpected exception");
 				}
 			}
 		}
@@ -163,11 +149,11 @@ class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler 
 			responseBuilder.setErrorCode(ErrorCode.SERVICE_NOT_FOUND);
 		} else if (e.getCause() instanceof NoSuchServiceMethodException) {
 			responseBuilder.setErrorCode(ErrorCode.METHOD_NOT_FOUND);
-		} else if (e.getCause() instanceof InvalidRpcRequestException) {
+		} else if (e.getCause() instanceof InvalidJanetRpcRequestException) {
 			responseBuilder.setErrorCode(ErrorCode.BAD_REQUEST_PROTO);
 		} else if (e.getCause() instanceof RpcServiceException) {
 			responseBuilder.setErrorCode(ErrorCode.RPC_ERROR);
-		} else if (e.getCause() instanceof RpcException) {
+		} else if (e.getCause() instanceof JanetRpcException) {
 			responseBuilder.setErrorCode(ErrorCode.RPC_FAILED);
 		} else {
 			/* Cannot respond to this exception, because it is not tied
@@ -175,7 +161,7 @@ class NettyRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler 
 			logger.info("Cannot respond to handler exception", e.getCause());
 			return;
 		}
-		RpcException ex = (RpcException) e.getCause();
+		JanetRpcException ex = (JanetRpcException) e.getCause();
 		if (ex.getRpcRequest() != null && ex.getRpcRequest().hasId()) {
 			responseBuilder.setId(ex.getRpcRequest().getId());
 			responseBuilder.setErrorMessage(ex.getMessage());

@@ -7,6 +7,7 @@
 package ru.hh.search.janet;
 
 import com.google.protobuf.Message;
+import org.jboss.netty.handler.codec.http.HttpVersion;
 
 public class JanetRpcResponse {
   public enum ErrorCode {
@@ -37,18 +38,21 @@ public class JanetRpcResponse {
   }
 
   public Message responseMessage;
+  HttpVersion version;
 
   public Message requestMessage;
   public String errorMessage;
   public ErrorCode errCode;
 
-  public JanetRpcResponse(Message responseMessage) {
+  public JanetRpcResponse(Message responseMessage, HttpVersion version) {
+    this.version = version;
     this.responseMessage = responseMessage;
     this.errCode = null;
     this.errorMessage = null;
   }
 
-  public JanetRpcResponse(Message requestMessage, String errorMessage, ErrorCode errCode) {
+  public JanetRpcResponse(Message requestMessage, String errorMessage, ErrorCode errCode, HttpVersion version) {
+    this.version = version;
     this.requestMessage = requestMessage;
     this.errorMessage = errorMessage;
     this.errCode = errCode;

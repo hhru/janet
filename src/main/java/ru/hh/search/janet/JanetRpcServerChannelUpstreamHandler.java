@@ -16,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.log4j.Logger;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
+import org.jboss.netty.channel.ChannelPipelineCoverage;
 import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
@@ -26,7 +27,7 @@ import ru.hh.search.janet.exception.NoSuchServiceException;
 import ru.hh.search.janet.exception.NoSuchServiceMethodException;
 import ru.hh.search.janet.exception.RpcServiceException;
 
-
+@ChannelPipelineCoverage("all")
 public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler {
 
   private static final Logger logger = Logger.getLogger(NettyRpcServerChannelUpstreamHandler.class);
@@ -53,11 +54,11 @@ public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamH
       RpcCallback<Message> callback = new RpcCallback<Message>() {
         public void run(Message methodResponse) {
           if (methodResponse != null) {
-            channel.write(new JanetRpcResponse(methodResponse));
+            channel.write(new JanetRpcResponse(methodResponse, request.version));
           } else {
             logger.info("service callback returned null message");
             if (controller.errorText() != null) {
-              channel.write(new JanetRpcResponse(request.requestMessage, controller.errorText(), ErrorCode.RPC_FAILED));
+              channel.write(new JanetRpcResponse(request.requestMessage, controller.errorText(), ErrorCode.RPC_FAILED, request.version));
             }
           }
         }
@@ -99,7 +100,7 @@ public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamH
 		JanetRpcException ex = (JanetRpcException) e.getCause();
 
 		if (ex.getRpcRequest() != null ) {
-			e.getChannel().write(new JanetRpcResponse(ex.getRpcRequest().requestMessage, ex.getMessage(), errorCode));
+			e.getChannel().write(new JanetRpcResponse(ex.getRpcRequest().requestMessage, ex.getMessage(), errorCode, ex.getRpcRequest().version));
 		} else {
 			logger.info("Cannot respond to handler exception", ex);
 		}

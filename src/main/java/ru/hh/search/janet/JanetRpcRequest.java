@@ -7,15 +7,18 @@
 package ru.hh.search.janet;
 
 import com.google.protobuf.Message;
+import org.jboss.netty.handler.codec.http.HttpVersion;
 
 public class JanetRpcRequest {
   
-  public JanetRpcRequest(String serviceName, String methodName, Message requestMessage) {
+  public JanetRpcRequest(String serviceName, String methodName, Message requestMessage, HttpVersion version) {
+    this.version = version;
     this.serviceName = serviceName;
     this.methodName = methodName;
     this.requestMessage = requestMessage;
   }
 
+  public HttpVersion version;
   public String serviceName;
   public String methodName;
   public Message requestMessage;

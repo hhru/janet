@@ -13,7 +13,6 @@ import org.jboss.netty.channel.Channels;
 import org.jboss.netty.handler.codec.http.HttpChunkAggregator;
 import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
-import org.jboss.netty.handler.codec.protobuf.ProtobufEncoder;
 import org.jboss.netty.handler.stream.ChunkedWriteHandler;
 
 class JanetRpcPipelineFactory implements ChannelPipelineFactory {
@@ -33,7 +32,7 @@ class JanetRpcPipelineFactory implements ChannelPipelineFactory {
     p.addLast("aggregator", new HttpChunkAggregator(65536));
     p.addLast("protobufDecoder", decoderFactory.getDecoder());
 
-    p.addLast("protobufEncoder", new ProtobufEncoder());
+    p.addLast("protobufEncoder", new JanetHttpProtobufEncoder());
     p.addLast("encoder", new HttpResponseEncoder());
     p.addLast("chunkedWriter", new ChunkedWriteHandler());
 

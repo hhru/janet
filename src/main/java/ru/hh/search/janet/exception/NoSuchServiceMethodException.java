@@ -15,5 +15,8 @@ public class NoSuchServiceMethodException extends JanetRpcException {
 	public NoSuchServiceMethodException(JanetRpcRequest request) {
 		super(request, "No such method: " + request.methodName);
 	}
-	
+
+  public NoSuchServiceMethodException(Throwable t, String message) {
+		super(t, null, message);
+	}
 }

@@ -10,10 +10,14 @@ package ru.hh.search.janet.exception;
 import com.google.protobuf.ServiceException;
 import ru.hh.search.janet.JanetRpcRequest;
 
-@SuppressWarnings("serial")
+
 public class RpcServiceException extends JanetRpcException {
 
 	public RpcServiceException(ServiceException serviceException, JanetRpcRequest request, String message) {
 		super(serviceException, request, message);
+	}
+
+  public RpcServiceException(JanetRpcRequest request, String message) {
+		super(request, message);
 	}
 }

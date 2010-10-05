@@ -10,14 +10,14 @@ package ru.hh.search.janet.exception;
 import ru.hh.search.janet.JanetRpcRequest;
 
 @SuppressWarnings("serial")
-public class NoSuchServiceException extends JanetRpcException {
+public class InvalidResponseException extends JanetRpcException {
 
-	public NoSuchServiceException(JanetRpcRequest request) {
-		super(request, "No such service name: " + request.serviceName);
-	}
+  public InvalidResponseException(Throwable t, String message) {
+    this(t, null, message);
+  }
 
-  public NoSuchServiceException(Throwable t, String message) {
-		super(t, null, message);
-	}
-	
+  public InvalidResponseException(Throwable t, JanetRpcRequest request, String message) {
+    super(t, request, message);
+  }
+
 }

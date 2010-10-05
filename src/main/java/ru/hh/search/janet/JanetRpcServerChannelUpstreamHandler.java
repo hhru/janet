@@ -13,28 +13,34 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.apache.log4j.Logger;
 import org.jboss.netty.channel.Channel;
+import org.jboss.netty.channel.ChannelFutureListener;
+import org.jboss.netty.channel.ChannelHandler.Sharable;
 import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipelineCoverage;
 import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
+import org.jboss.netty.handler.codec.http.HttpVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import ru.hh.search.janet.JanetRpcResponse.ErrorCode;
-import ru.hh.search.janet.exception.InvalidJanetRpcRequestException;
+import ru.hh.search.janet.exception.InvalidRequestException;
+import ru.hh.search.janet.exception.InvalidResponseException;
 import ru.hh.search.janet.exception.JanetRpcException;
 import ru.hh.search.janet.exception.NoSuchServiceException;
 import ru.hh.search.janet.exception.NoSuchServiceMethodException;
 import ru.hh.search.janet.exception.RpcServiceException;
 
-@ChannelPipelineCoverage("all")
+@Sharable
 public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamHandler {
 
-  private static final Logger logger = Logger.getLogger(NettyRpcServerChannelUpstreamHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(JanetRpcServerChannelUpstreamHandler.class);
 
   private final Map<String, Service> serviceMap = new ConcurrentHashMap<String, Service>();
 
   public void messageReceived(ChannelHandlerContext ctx, MessageEvent e) throws Exception {
+
+    logger.info(JanetRpcServerChannelUpstreamHandler.class.getName());
 
     final JanetRpcRequest request = (JanetRpcRequest) e.getMessage();
 
@@ -43,34 +49,43 @@ public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamH
     Service service = serviceMap.get(request.serviceName);
     if (service == null) {
       throw new NoSuchServiceException(request);
-    } else if (service.getDescriptorForType().findMethodByName(request.methodName) == null) {
-      throw new NoSuchServiceMethodException(request);
     } else {
       MethodDescriptor methodDescriptor = service.getDescriptorForType().findMethodByName(request.methodName);
 
-      final Channel channel = e.getChannel();
-      final RpcController controller = new JanetRpcController();
+      if (methodDescriptor == null) {
+        throw new NoSuchServiceMethodException(request);
+      } else {
 
-      RpcCallback<Message> callback = new RpcCallback<Message>() {
-        public void run(Message methodResponse) {
-          if (methodResponse != null) {
-            channel.write(new JanetRpcResponse(methodResponse, request.version));
-          } else {
-            logger.info("service callback returned null message");
-            if (controller.errorText() != null) {
-              channel.write(new JanetRpcResponse(request.requestMessage, controller.errorText(), ErrorCode.RPC_FAILED, request.version));
+        final Channel channel = e.getChannel();
+        final RpcController controller = new JanetRpcController();
+
+        RpcCallback<Message> callback = new RpcCallback<Message>() {
+          public void run(Message methodResponse) {
+            JanetRpcResponse responce = new JanetRpcResponse(request.requestMessage, "This could not happen.", ErrorCode.RPC_FAILED, request.version);
+            if (methodResponse != null) {
+              responce = new JanetRpcResponse(methodResponse, request.version);
+            } else {
+              logger.info("service callback returned null message");
+              if (controller.errorText() != null) {
+                responce.setErrorMessage(controller.errorText());
+              }
+              else {
+                responce.setErrorMessage("service callback returned null message");
+              }
             }
+            channel.write(responce).addListener(ChannelFutureListener.CLOSE);
           }
+        };
+
+        try {
+          service.callMethod(methodDescriptor, controller, request.requestMessage, callback);
+        } catch (Exception ex) {
+          throw new JanetRpcException(ex, request, "Service threw unexpected exception");
         }
-      };
 
-      try {
-        service.callMethod(methodDescriptor, controller, request.requestMessage, callback);
-      } catch (Exception ex) {
-        throw new JanetRpcException(ex, request, "Service threw unexpected exception");
       }
-
     }
+
   }
 
 
@@ -84,8 +99,10 @@ public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamH
 			errorCode = ErrorCode.SERVICE_NOT_FOUND;
 		} else if (e.getCause() instanceof NoSuchServiceMethodException) {
 			errorCode =ErrorCode.METHOD_NOT_FOUND;
-		} else if (e.getCause() instanceof InvalidJanetRpcRequestException) {
+		} else if (e.getCause() instanceof InvalidRequestException) {
 			errorCode = ErrorCode.BAD_REQUEST_PROTO;
+    } else if (e.getCause() instanceof InvalidResponseException) {
+			errorCode = ErrorCode.BAD_RESPONSE_PROTO;
 		} else if (e.getCause() instanceof RpcServiceException) {
 			errorCode = ErrorCode.RPC_ERROR;
 		} else if (e.getCause() instanceof JanetRpcException) {
@@ -99,23 +116,31 @@ public class JanetRpcServerChannelUpstreamHandler extends SimpleChannelUpstreamH
 
 		JanetRpcException ex = (JanetRpcException) e.getCause();
 
+    JanetRpcResponse response = null;
+
 		if (ex.getRpcRequest() != null ) {
-			e.getChannel().write(new JanetRpcResponse(ex.getRpcRequest().requestMessage, ex.getMessage(), errorCode, ex.getRpcRequest().version));
+			response = new JanetRpcResponse(ex.getRpcRequest().requestMessage, ex.getMessage(), errorCode, ex.getRpcRequest().version);
 		} else {
-			logger.info("Cannot respond to handler exception", ex);
+      response = new JanetRpcResponse(null, ex.getMessage(), errorCode, HttpVersion.HTTP_1_0);
+      logger.info("Cannot respond to handler exception", ex);
 		}
+
+    e.getChannel().write(response).addListener(ChannelFutureListener.CLOSE);
   }
 
   synchronized void registerService(Service service) {
-    if(serviceMap.containsKey(service.getDescriptorForType().getFullName())) {
+    //String serviceName = service.getDescriptorForType().getFullName();
+    String serviceName = service.getDescriptorForType().getName();
+
+    if(serviceMap.containsKey(serviceName)) {
       throw new IllegalArgumentException("Service already registered");
     }
-    serviceMap.put(service.getDescriptorForType().getFullName(), service);
+    serviceMap.put(serviceName, service);
   }
 
   synchronized void unregisterService(Service service) {
     if(!serviceMap.containsKey(service.getDescriptorForType().getFullName())) {
-      throw new IllegalArgumentException("Service not already registered");
+      throw new IllegalArgumentException("Service was not already registered");
     }
     serviceMap.remove(service.getDescriptorForType().getFullName());
   }

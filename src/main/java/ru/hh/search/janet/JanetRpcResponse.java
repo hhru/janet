@@ -51,6 +51,15 @@ public class JanetRpcResponse {
     this.errorMessage = null;
   }
 
+  public void setErrCode(ErrorCode errCode) {
+    this.errCode = errCode;
+  }
+
+  public void setErrorMessage(String errorMessage) {
+
+    this.errorMessage = errorMessage;
+  }
+
   public JanetRpcResponse(Message requestMessage, String errorMessage, ErrorCode errCode, HttpVersion version) {
     this.version = version;
     this.requestMessage = requestMessage;

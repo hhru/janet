@@ -6,23 +6,28 @@
  */
 package ru.hh.search.janet;
 
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 import java.util.Map;
-import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBufferInputStream;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.handler.codec.http.DefaultHttpRequest;
 import org.jboss.netty.handler.codec.oneone.OneToOneDecoder;
-import ru.hh.search.janet.exception.InvalidJanetRpcRequestException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import ru.hh.search.janet.exception.InvalidRequestException;
+import ru.hh.search.janet.exception.NoSuchServiceException;
+import ru.hh.search.janet.exception.NoSuchServiceMethodException;
 
 public class JanetHttpProtobufDecoder extends OneToOneDecoder {
 
-  private Map<String, Map<String, Message>> prototypes;
+  private final Map<String, Map<String, Message>> prototypes;
 //  private ExtensionRegistry extensionRegistry;
 
+  Logger logger = LoggerFactory.getLogger(JanetHttpProtobufDecoder.class);
+
   public JanetHttpProtobufDecoder(Map<String, Map<String, Message>> prototypes) {
+    super();
     this.prototypes = prototypes;
   }
 
@@ -33,15 +38,50 @@ public class JanetHttpProtobufDecoder extends OneToOneDecoder {
 
 
   protected Object decode(ChannelHandlerContext ctx, Channel channel, Object msg) throws Exception {
-    if (!(msg instanceof ChannelBuffer)) {
-      return msg;
+
+    DefaultHttpRequest request = null;
+    try {
+      request = (DefaultHttpRequest) msg;
+    } catch (Exception e) {
+      throw new InvalidRequestException(e, null, "Cannot decode HttpRequest.");
+    }
+    logger.info("Request uri: " + request.getUri());
+
+    String serviceName = null;
+    String methodName = null;
+    String[] uriParsed = uriParse(request.getUri());
+    try {
+      serviceName = uriParsed[1];
+    } catch (NullPointerException e) {
+      throw new NoSuchServiceException(e, "No serviceName in uri: "+request.getUri());
     }
 
-    DefaultHttpRequest request = (DefaultHttpRequest) msg;
-    String[] uriParsed = uriParse(request.getUri());
-    String serviceName = uriParsed[0];
-    String methodName = uriParsed[1];
-    Message prototype = prototypes.get(serviceName).get(methodName);
+    try {
+      methodName = uriParsed[2];
+    } catch (NullPointerException e) {
+      throw new NoSuchServiceMethodException(e, "No methodName in uri: "+request.getUri());
+    }
+    logger.info("Received request for serviceName: " + serviceName + ", method: " + methodName);
+
+
+    Message prototype;
+    Map<String, Message> method2prototype = null;
+    try {
+      method2prototype = prototypes.get(serviceName);
+    } catch (Exception e) {
+      throw new NoSuchServiceException(e, serviceName);
+    }
+
+    try {
+      prototype = method2prototype.get(methodName);
+    } catch (Exception e) {
+      throw new NoSuchServiceMethodException(e, methodName);
+    }
+
+    if (prototype == null)
+    {
+      throw new InvalidRequestException(new Exception(), "No response prototype found.");
+    }
 
     /*if (extensionRegistry == null) {
       return new JanetRpcRequest(uri, prototype.newBuilderForType().mergeFrom(
@@ -51,15 +91,16 @@ public class JanetHttpProtobufDecoder extends OneToOneDecoder {
           new ChannelBufferInputStream((ChannelBuffer) msg),
           extensionRegistry).build());
     }*/
+
     Message message;
     try {
-      message = prototype.newBuilderForType().mergeFrom(
-          new ChannelBufferInputStream((ChannelBuffer) msg)
-      ).build();
-    }catch (InvalidProtocolBufferException ex) {
-      throw new InvalidJanetRpcRequestException(ex, "Could not build method request message");
+      ChannelBufferInputStream bodyStream = new ChannelBufferInputStream(request.getContent());
+      message = prototype.newBuilderForType().mergeFrom(bodyStream).build();
+    }catch (Exception ex) {
+      throw new InvalidRequestException(ex, "Could not build messagefrom request.");
     }
-    return new JanetRpcRequest(serviceName, methodName, message);
+    
+    return new JanetRpcRequest(serviceName, methodName, message, request.getProtocolVersion());
   }
 
   private static String[] uriParse(String uri){

@@ -24,11 +24,6 @@ public class JanetRpcException extends Exception {
 		this.request = request;
 	}
 
-  public JanetRpcException(String message, Throwable cause) {
-    super(message, cause);
-    this.request=null;
-  }
-
   public JanetRpcRequest getRpcRequest() {
 		return request;
 	}

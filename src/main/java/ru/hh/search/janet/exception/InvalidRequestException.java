@@ -7,11 +7,17 @@
 
 package ru.hh.search.janet.exception;
 
-@SuppressWarnings("serial")
-public class InvalidJanetRpcRequestException extends JanetRpcException {
+import ru.hh.search.janet.JanetRpcRequest;
 
-  public InvalidJanetRpcRequestException(Throwable t, String message) {
-    super(message, t);
+@SuppressWarnings("serial")
+public class InvalidRequestException extends JanetRpcException {
+
+  public InvalidRequestException(Throwable t, String message) {
+    this(t, null, message);
+  }
+
+  public InvalidRequestException(Throwable t, JanetRpcRequest request, String message) {
+    super(t, request, message);
   }
 
 }

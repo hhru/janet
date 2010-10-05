@@ -11,8 +11,12 @@ import com.google.protobuf.Message;
 import com.google.protobuf.Service;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class JanetHttpProtobufDecoderFactory {
+public class  JanetHttpProtobufDecoderFactory {
+
+  Logger logger = LoggerFactory.getLogger(JanetHttpProtobufDecoderFactory.class);
 
   private Map<String, Map<String, Message>> prototypes;
 
@@ -26,17 +30,29 @@ public class JanetHttpProtobufDecoderFactory {
 
   synchronized public void registerService(Service service) {
 
-    String serviceName = service.getDescriptorForType().getFullName();
+    logger.info("Registring decoder prototypes");
+
+    //String serviceName = service.getDescriptorForType().getFullName();
+    String serviceName = service.getDescriptorForType().getName();
+
+    logger.info("Service: "+serviceName);
+
     Map<String, Message> methods = new ConcurrentHashMap<String, Message>();
     
     for (MethodDescriptor md : service.getDescriptorForType().getMethods()){
-      methods.put(md.getFullName(), service.getRequestPrototype(md));
+      String methodName = md.getName();
+      Message prototype = service.getRequestPrototype(md);
+
+      logger.info("Method \""+methodName + "\" prototype: " + prototype.getDescriptorForType().getName());
+      
+      methods.put(methodName, prototype);
     }
     this.prototypes.put(serviceName, methods);
 
   }
 
   public JanetHttpProtobufDecoder getDecoder(){
+    logger.info("Creating decoder.");
     return new JanetHttpProtobufDecoder(prototypes);
   }
 }

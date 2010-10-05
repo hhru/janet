@@ -11,7 +11,7 @@
   <groupId>ru.hh.search</groupId>
   <artifactId>janet</artifactId>
   <packaging>jar</packaging>
-  <version>0.1-SNAPSHOT</version>
+  <version>0.1</version>
 
   <name>Netty Protobuf RPC Implementation over HTTP</name>
   <build>
